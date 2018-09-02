@@ -69,37 +69,21 @@ tf.reset_default_graph()
 sess = tf.Session()
 
 env = gym.make('PongNoFrameskip-v4')
-CHECKPOINT_FOLDER = "../ckpts/substitute/sub_8_18/"
-SUB_DATA_FOLDER = "../data/sub_8_18/"
-SUB_AUG_DATA_FOLDER = "../data/sub_8_18/aug/"
+CHECKPOINT_FOLDER = "../ckpts/substitute/"
+SUB_DATA_FOLDER = "../data/"
+SUB_AUG_DATA_FOLDER = "../data/aug/"
 BS = 1
 LR = 0.0001
 EP_NUM = 50
-EP_NUM_AUG = 50
-
-#dqn = DQNAgent(env, sess, "../ckpts/dqn/pong_final/dqn_final.ckpt")
-#X, Y, rewards = generateSubstituteExamples(env, dqn, numPerAction=300, gamesNum=5)
-#saveSubstituteData(X, Y, SUB_DATA_FOLDER)
-#X, Y = loadSubstituteData(SUB_DATA_FOLDER)
-
-#sub = models.SubstituteModel(env, sess) #, "../ckpts/substitute/final.ckpt")
-#sub.train(X, Y, LR, EP_NUM, BS, EP_NUM+1, 0, 0, None, CHECKPOINT_FOLDER)
-
-#Xa, Ya = sub.augmentSubstituteData(X, Y, dqn, 500, [0.1, 0.2])
-#saveSubstituteData(Xa, Ya, SUB_AUG_DATA_FOLDER)
-sub = models.SubstituteModel(env, sess)
-Xa, Ya = loadSubstituteData(SUB_AUG_DATA_FOLDER)
-sub.train(Xa, Ya, LR, EP_NUM_AUG, BS, EP_NUM_AUG+1, 0, 0, None, CHECKPOINT_FOLDER)
-
-tf.reset_default_graph()
-sess.close()
-sess = tf.Session()
-
-sub = models.SubstituteModel(env, sess, "../ckpts/substitute/final.ckpt")
-attack = models.AttackModel(sub)
-attack.setupAttack("fgsm", eps=0.5)
-attack.setAttackProb(1.0)
-#attack.setActionProbThr(0.001)
 
 dqn = DQNAgent(env, sess, "../ckpts/dqn/pong_final/dqn_final.ckpt")
-rewards, lengths, attNums, _ = dqn.test(5, attack) #, render=True)
+#X, Y, rewards = generateSubstituteExamples(env, dqn, numPerAction=300, gamesNum=5)
+#saveSubstituteData(X, Y, SUB_DATA_FOLDER)
+X, Y = loadSubstituteData(SUB_DATA_FOLDER)
+
+sub = models.SubstituteModel(env, sess)#, "../ckpts/substitute/epoch_49.ckpt")
+sub.train(X, Y, LR, EP_NUM, BS, EP_NUM+1, 0, 0, None, CHECKPOINT_FOLDER)
+
+Xa, Ya = sub.augmentSubstituteData(X, Y, dqn, 500, [0.1, 0.2])
+#Xa, Ya = loadSubstituteData(SUB_AUG_DATA_FOLDER)
+sub.train(Xa, Ya, LR, EP_NUM, BS, EP_NUM+1, 0, 0, None, CHECKPOINT_FOLDER, epochStart=EP_NUM)

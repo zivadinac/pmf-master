@@ -5,6 +5,7 @@ import cleverhans.attacks as atts
 from cleverhans.attacks_tf import jacobian_graph, jacobian_augmentation
 from skimage.filters import median
 import utils
+from ofsm import OFSM
 
 class AttackModel(Model):
 
@@ -14,6 +15,7 @@ class AttackModel(Model):
         self.layer_names = ['inputs', 'logits', 'probs']
         self.layers = [model.inputs, model.logits, model.probs]
         self.input_shape = tuple(model.inputs.shape.as_list())
+        self.nb_classes = model.logits.get_shape()[1].value
 
         self.attackModels = {}
         self.attackModels["lbfgs"] = atts.LBFGS(self, "tf", self.sess)
@@ -29,6 +31,8 @@ class AttackModel(Model):
         self.attackModels["featureAdvs"] = atts.FastFeatureAdversaries(self, "tf", self.sess)
         
         self.availableAttacks = list(self.attackModels.keys())
+        self.availableAttacks.append("ofsm")
+        self.ofsm = OFSM()
         self.availableAttacks.append("gauss")
         self.gaussEps = 0.0
         self.attack = None
@@ -69,18 +73,30 @@ class AttackModel(Model):
         if self.availableAttacks.count(attack) == 0:
             raise ValueError("Unknown attack type '" + str(attack) + "'.")
 
-        if attack != self.lastAttack:
-            if attack == "gauss":
-                self.gaussEps = kwargs["eps"]
-                self.attack = None
-            else:
-                self.attack = self.attackModels[attack].generate(self.layers[0], **kwargs)
+        if attack == "gauss":
+            self.gaussEps = kwargs["eps"]
+            self.attack = None
+        elif attack == "ofsm":
+            self.ofsm.setupAttack(**kwargs)
+        elif attack == "spsa":
+            # SPSA requires batch of size 1
+            # so it is useful to always return one element in batch
+            spsaInput = tf.slice(self.get_input(), [0, 0, 0, 0], [1, 84, 84, 4])
+            spsaMin = tf.reduce_min(spsaInput)
+            spsaInput = spsaInput - spsaMin
+            self.attack = self.attackModels[attack].generate(spsaInput, **kwargs)
+            self.attack = self.attack + spsaMin
+        else:
+            self.attack = self.attackModels[attack].generate(self.get_input(), **kwargs)
 
-            self.lastAttack = attack
+        self.lastAttack = attack
 
     def runAttack(self, x):
         if self.lastAttack == "gauss":
             return x + self.gaussEps * np.random.randn(*x.shape)
+
+        if self.lastAttack == "ofsm":
+            return self.ofsm.runAttack(x)
 
         return self.sess.run(self.attack, feed_dict={self.get_input(): x})
 
